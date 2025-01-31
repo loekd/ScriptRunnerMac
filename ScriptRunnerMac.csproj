@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks></TargetFrameworks>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimmerDefaultAction>link</TrimmerDefaultAction>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Nulllable>enable</Nulllable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SharpHook" Version="5.3.8" />
+    <PackageReference Include="SharpHook.Reactive" Version="5.3.8" />
+    <PackageReference Include="System.Reactive" Version="6.0.0" />
+  </ItemGroup>
+
+
+</Project>

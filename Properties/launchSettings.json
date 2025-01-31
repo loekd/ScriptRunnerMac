@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "ScriptRunner2": {
+      "commandName": "Project",
+      "commandLineArgs": "-f /Users/loekd/projects/ScriptRunnerMac/demo.md"
+    }
+  }
+}
