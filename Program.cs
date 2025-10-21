@@ -153,6 +153,12 @@ namespace ScriptRunnerMac
 
         private static void Terminate(object sender, EventArgs e)
         {
+            if (!ActiveWindow.IsProcessMainWindowFocused(process.Id))
+            {
+                Console.WriteLine("Ignoring hotkey - terminal not focused.");
+                return;
+            }
+            
             hook.Dispose();
             Console.WriteLine("Terminating");
             Environment.Exit(0);
@@ -181,6 +187,10 @@ namespace ScriptRunnerMac
                     keyboard.SimulateKeyPress(SharpHook.Native.KeyCode.VcC);                    
                     keyboard.SimulateKeyRelease(SharpHook.Native.KeyCode.VcC);
                     keyboard.SimulateKeyRelease(SharpHook.Native.KeyCode.VcLeftControl);
+                    break;
+                case "$RETURN":
+                    keyboard.SimulateKeyPress(SharpHook.Native.KeyCode.VcEnter);
+                    keyboard.SimulateKeyRelease(SharpHook.Native.KeyCode.VcEnter);
                     break;
                 default:
                     keyboard.SimulateTextEntry(line);
