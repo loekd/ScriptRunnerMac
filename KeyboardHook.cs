@@ -6,6 +6,8 @@ namespace ScriptRunnerMac
     {
         private SimpleGlobalHook _hook;
         public event EventHandler<EventArgs> HotKeyPressed;
+        
+        public event EventHandler<EventArgs> RefreshPressed;
         public event EventHandler<EventArgs> EscapePressed;
 
        
@@ -24,19 +26,28 @@ namespace ScriptRunnerMac
             return Task.CompletedTask;
         }
 
-        private void OnHookEvent(object sender, KeyboardHookEventArgs e){
-            if (e.Data.KeyCode == SharpHook.Native.KeyCode.VcF10)
+        private void OnHookEvent(object sender, KeyboardHookEventArgs e)
+        {
+            switch (e.Data.KeyCode)
             {
-                e.SuppressEvent = true;
-                //Console.WriteLine("F10 pressed");                
-                OnHotKeyPressed();
+                case SharpHook.Native.KeyCode.VcF10:
+                    e.SuppressEvent = true;              
+                    OnHotKeyPressed();
+                    break;
+                case SharpHook.Native.KeyCode.VcF5:
+                    e.SuppressEvent = true;
+                    OnRefreshPressed();
+                    break;
+                case SharpHook.Native.KeyCode.VcEscape:
+                    e.SuppressEvent = true;
+                    OnEscapePressed();
+                    break;
             }
-            else if (e.Data.KeyCode == SharpHook.Native.KeyCode.VcEscape)
-            {
-                e.SuppressEvent = true;
-                //Console.WriteLine("Esc pressed");
-                OnEscapePressed();
-            }
+        }
+        
+        private void OnRefreshPressed()
+        {
+            RefreshPressed?.Invoke(null, EventArgs.Empty);
         }
 
         private void OnHotKeyPressed()
@@ -60,10 +71,4 @@ namespace ScriptRunnerMac
             Dispose();
         }      
     }   
-
-    // internal static class Interop
-    // {
-    //     [DllImport("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")]
-    //     public static extern void CFRunLoopRun();
-    // }
 }

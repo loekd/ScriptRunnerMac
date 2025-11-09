@@ -1,13 +1,5 @@
-﻿using System;
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Reactive.Linq;
-using System.Runtime.InteropServices;
-using System.Threading;
-using System.Threading.Tasks;
+﻿using System.Diagnostics;
 using SharpHook;
-
 
 namespace ScriptRunnerMac
 {
@@ -21,6 +13,7 @@ namespace ScriptRunnerMac
 
         private static string[] lines;
         private static string workingDir;
+        private static string inputFile;
 
         static async Task Main(string[] args)
         {
@@ -28,19 +21,16 @@ namespace ScriptRunnerMac
             hook = new KeyboardHook();
             Console.WriteLine("Running!");
             hook.EscapePressed += Terminate;
-            hook.HotKeyPressed += HotKeyPressed;            
-            string file = args[^1];
-            lines = ReadCommands(file);
+            hook.HotKeyPressed += HotKeyPressed;
+            hook.RefreshPressed += RefreshPressed;
+            inputFile = args[^1];
+            lines = ReadCommands();
 
-
-            Console.ForegroundColor = ConsoleColor.Blue;
-            Console.WriteLine("Running {0} commands from {1}", lines.Length, file);
-            Console.ForegroundColor = ConsoleColor.White;
             WriteHorizontalLine();
 
             //run a process that executes the command and redirect input back here:
-            workingDir = Path.GetDirectoryName(file) ?? Environment.CurrentDirectory;
-            process = RunSubprocess(workingDir);
+            workingDir = Path.GetDirectoryName(inputFile) ?? Environment.CurrentDirectory;
+            process = RunSubprocess();
             if (process == null)
             {
                 Console.WriteLine("Failed to start subprocess");
@@ -61,10 +51,19 @@ namespace ScriptRunnerMac
             await completed;
         }
 
-        private static Process RunSubprocess(string workingDir)
+        private static void RefreshPressed(object sender, EventArgs e)
         {
-            var process = Process.GetProcessesByName("Ghostty").OrderByDescending(p => p.StartTime).FirstOrDefault();
-            if (process == null)
+            //Reload file
+            lines = ReadCommands();
+            currentLineIndex = currentLineIndex > 0 ? currentLineIndex - 1 : 0;
+            isRunningStatement = false;
+            Console.WriteLine("Reloaded file");
+        }
+
+        private static Process RunSubprocess()
+        {
+            var subProcess = Process.GetProcessesByName("Ghostty").OrderByDescending(p => p.StartTime).FirstOrDefault();
+            if (subProcess == null)
             {
                 //launch shell
                 var psi = new ProcessStartInfo(@"open")
@@ -74,34 +73,36 @@ namespace ScriptRunnerMac
                     Arguments = "-a Ghostty.app -n",
 
                 };
-                var shell = Process.Start(psi);
+                Process.Start(psi);
                 Thread.Sleep(300);
             }
 
             process = Process.GetProcessesByName("Ghostty").OrderByDescending(p => p.StartTime).FirstOrDefault();
-            if (process != null)
-            {
-                process.EnableRaisingEvents = true;
-            }
-
-            if (process.HasExited)
-            {
-                Console.Error.WriteLine("Subprocess exited");
+            if (process == null || process.HasExited)
                 return null;
-            }
+            
+            process.EnableRaisingEvents = true;
             return process;
         }
 
-        private static string[] ReadCommands(string file)
+        private static string[] ReadCommands()
         {
-            if (!File.Exists(file))
+            if (!File.Exists(inputFile))
             {
-                Console.Error.WriteLine("File not found: {0}", file);
+                Console.Error.WriteLine("File not found: {0}", inputFile);
                 Environment.Exit(1);
             }
             //ignore empty lines and comments
-            var lines = File.ReadAllLines(file);
-            return lines.Where(l => !string.IsNullOrWhiteSpace(l) && !l.StartsWith('#')).ToArray();
+            var content = File.ReadAllLines(inputFile);
+            var filtered = content
+                .Where(line => !string.IsNullOrWhiteSpace(line) && !line.StartsWith('#'))
+                .ToArray();
+            
+            Console.ForegroundColor = ConsoleColor.Blue;
+            Console.WriteLine("Running {0} commands from {1}", filtered.Length, inputFile);
+            Console.ForegroundColor = ConsoleColor.White;
+            
+            return filtered;
         }
 
         private static void HotKeyPressed(object sender, EventArgs e)
@@ -143,9 +144,6 @@ namespace ScriptRunnerMac
 
         private static void ExecuteCommandInTerminal()
         {
-            //remove the F10 char
-            // keyboard.SimulateKeyPress(SharpHook.Native.KeyCode.VcBackspace);
-            // Thread.Sleep(10);
             //execute the command
             keyboard.SimulateKeyPress(SharpHook.Native.KeyCode.VcEnter);
             Thread.Sleep(10);
@@ -171,7 +169,7 @@ namespace ScriptRunnerMac
             var oldColor = Console.ForegroundColor;
             Console.SetCursorPosition(0, 0);
             Console.ForegroundColor = ConsoleColor.Blue;
-            Console.WriteLine(string.Format("Next command: {0}", nextLine).PadRight(Console.WindowWidth, ' '));
+            Console.WriteLine($"Next command: {nextLine}".PadRight(Console.WindowWidth, ' '));
             WriteHorizontalLine();
 
             Console.SetCursorPosition(cursorLeft, cursorTop);
@@ -184,7 +182,7 @@ namespace ScriptRunnerMac
             {
                 case "$CTRL+C":
                     keyboard.SimulateKeyPress(SharpHook.Native.KeyCode.VcLeftControl);
-                    keyboard.SimulateKeyPress(SharpHook.Native.KeyCode.VcC);                    
+                    keyboard.SimulateKeyPress(SharpHook.Native.KeyCode.VcC);
                     keyboard.SimulateKeyRelease(SharpHook.Native.KeyCode.VcC);
                     keyboard.SimulateKeyRelease(SharpHook.Native.KeyCode.VcLeftControl);
                     break;
@@ -196,15 +194,6 @@ namespace ScriptRunnerMac
                     keyboard.SimulateTextEntry(line);
                     break;
             }
-            //type command: (updateable)
-            //remove the F10 chars before typing a line
-            // keyboard.SimulateKeyPress(SharpHook.Native.KeyCode.VcBackspace);
-            // Thread.Sleep(10);
-            // keyboard.SimulateKeyPress(SharpHook.Native.KeyCode.VcBackspace);
-            // Thread.Sleep(10);
-            //use virtual keyboard to type the command (no enter)
-            // keyboard.SimulateTextEntry(line);
-            //Thread.Sleep(10);
         }
 
         private static void WriteHorizontalLine()
