@@ -3,60 +3,64 @@ using SharpHook;
 
 namespace ScriptRunnerMac
 {
-    internal class Program
+    internal static class Program
     {
-        private static EventSimulator keyboard;
-        private static Process process;
-        private static bool isRunningStatement;
-        private static int currentLineIndex;
-        private static KeyboardHook hook;
+        private static EventSimulator _keyboard;
+        private static Process _process;
+        private static bool _isRunningStatement;
+        private static int _currentLineIndex;
+        private static KeyboardHook _hook;
 
-        private static string[] lines;
-        private static string workingDir;
-        private static string inputFile;
+        private static string[] _lines;
+        private static string _workingDir;
+        private static string _inputFile;
 
         static async Task Main(string[] args)
         {
-            keyboard = new EventSimulator();
-            hook = new KeyboardHook();
-            Console.WriteLine("Running!");
-            hook.EscapePressed += Terminate;
-            hook.HotKeyPressed += HotKeyPressed;
-            hook.RefreshPressed += RefreshPressed;
-            inputFile = args[^1];
-            lines = ReadCommands();
+            _keyboard = new EventSimulator();
+            _hook = new KeyboardHook();
+            _hook.EscapePressed += Terminate;
+            _hook.HotKeyPressed += HotKeyPressed;
+            _hook.RefreshPressed += RefreshPressed;
+            _inputFile = args[^1];
+            _lines = ReadCommands();
 
             WriteHorizontalLine();
 
             //run a process that executes the command and redirect input back here:
-            workingDir = Path.GetDirectoryName(inputFile) ?? Environment.CurrentDirectory;
-            process = RunSubprocess();
-            if (process == null)
+            _workingDir = Path.GetDirectoryName(_inputFile) ?? Environment.CurrentDirectory;
+            _process = RunSubprocess();
+            if (_process is null)
             {
                 Console.WriteLine("Failed to start subprocess");
                 return;
             }
 
-            //exit when subprocess exits:
-            process.Exited += (sender, e) =>
+            //exit when sub-process exits:
+            _process.Exited += (sender, e) =>
             {
                 Console.WriteLine("Subprocess exited");
-                process.Dispose();
-                hook.Dispose();
+                _process.Dispose();
+                _hook.Dispose();
                 Environment.Exit(0);
             };
 
-            var completed = hook.SetHook();
-            hook.Dispose();
+            var completed = _hook.SetHook();
+            _hook.Dispose();
             await completed;
         }
 
         private static void RefreshPressed(object sender, EventArgs e)
         {
+            if (!ActiveWindow.IsProcessMainWindowFocused(_process.Id))
+            {
+                Console.WriteLine("Ignoring refresh - terminal not focused.");
+                return;
+            }
             //Reload file
-            lines = ReadCommands();
-            currentLineIndex = currentLineIndex > 0 ? currentLineIndex - 1 : 0;
-            isRunningStatement = false;
+            _lines = ReadCommands();
+            _currentLineIndex = _currentLineIndex > 0 ? _currentLineIndex - 1 : 0;
+            _isRunningStatement = false;
             Console.WriteLine("Reloaded file");
         }
 
@@ -68,7 +72,7 @@ namespace ScriptRunnerMac
                 //launch shell
                 var psi = new ProcessStartInfo(@"open")
                 {
-                    WorkingDirectory = workingDir,
+                    WorkingDirectory = _workingDir,
                     UseShellExecute = true,
                     Arguments = "-a Ghostty.app -n",
 
@@ -77,29 +81,29 @@ namespace ScriptRunnerMac
                 Thread.Sleep(300);
             }
 
-            process = Process.GetProcessesByName("Ghostty").OrderByDescending(p => p.StartTime).FirstOrDefault();
-            if (process == null || process.HasExited)
+            _process = Process.GetProcessesByName("Ghostty").OrderByDescending(p => p.StartTime).FirstOrDefault();
+            if (_process == null || _process.HasExited)
                 return null;
             
-            process.EnableRaisingEvents = true;
-            return process;
+            _process.EnableRaisingEvents = true;
+            return _process;
         }
 
         private static string[] ReadCommands()
         {
-            if (!File.Exists(inputFile))
+            if (!File.Exists(_inputFile))
             {
-                Console.Error.WriteLine("File not found: {0}", inputFile);
+                Console.Error.WriteLine("File not found: {0}", _inputFile);
                 Environment.Exit(1);
             }
             //ignore empty lines and comments
-            var content = File.ReadAllLines(inputFile);
+            var content = File.ReadAllLines(_inputFile);
             var filtered = content
                 .Where(line => !string.IsNullOrWhiteSpace(line) && !line.StartsWith('#'))
                 .ToArray();
             
             Console.ForegroundColor = ConsoleColor.Blue;
-            Console.WriteLine("Running {0} commands from {1}", filtered.Length, inputFile);
+            Console.WriteLine("Running {0} commands from {1}", filtered.Length, _inputFile);
             Console.ForegroundColor = ConsoleColor.White;
             
             return filtered;
@@ -107,32 +111,32 @@ namespace ScriptRunnerMac
 
         private static void HotKeyPressed(object sender, EventArgs e)
         {
-            if (!ActiveWindow.IsProcessMainWindowFocused(process.Id))
+            if (!ActiveWindow.IsProcessMainWindowFocused(_process.Id))
             {
                 Console.WriteLine("Ignoring hotkey - terminal not focused.");
                 return;
             }
-            if (isRunningStatement && currentLineIndex > 0)
+            if (_isRunningStatement && _currentLineIndex > 0)
             {
                 ExecuteCommandInTerminal();
-                isRunningStatement = false;
+                _isRunningStatement = false;
             }
             else
             {
-                isRunningStatement = true;
+                _isRunningStatement = true;
 
                 //check if we are at the end of the file
-                if (currentLineIndex >= lines.Length)
+                if (_currentLineIndex >= _lines.Length)
                 {
                     //KillSubprocess();
                     SendFinishedToTerminal();
                     return;
                 }
 
-                string line = lines[currentLineIndex++];
-                string nextLine = lines.Length > currentLineIndex ? lines[currentLineIndex] : "exit";
+                string line = _lines[_currentLineIndex++];
+                string nextLine = _lines.Length > _currentLineIndex ? _lines[_currentLineIndex] : "exit";
 
-                if (currentLineIndex == 1)
+                if (_currentLineIndex == 1)
                 {
                     ShowNextLine(line);
                 }
@@ -145,19 +149,20 @@ namespace ScriptRunnerMac
         private static void ExecuteCommandInTerminal()
         {
             //execute the command
-            keyboard.SimulateKeyPress(SharpHook.Native.KeyCode.VcEnter);
+            _keyboard.SimulateKeyPress(SharpHook.Native.KeyCode.VcEnter);
             Thread.Sleep(10);
+            Console.WriteLine($"Executed line {_currentLineIndex}");
         }
 
         private static void Terminate(object sender, EventArgs e)
         {
-            if (!ActiveWindow.IsProcessMainWindowFocused(process.Id))
+            if (!ActiveWindow.IsProcessMainWindowFocused(_process.Id))
             {
                 Console.WriteLine("Ignoring hotkey - terminal not focused.");
                 return;
             }
             
-            hook.Dispose();
+            _hook.Dispose();
             Console.WriteLine("Terminating");
             Environment.Exit(0);
         }
@@ -181,17 +186,17 @@ namespace ScriptRunnerMac
             switch (line)
             {
                 case "$CTRL+C":
-                    keyboard.SimulateKeyPress(SharpHook.Native.KeyCode.VcLeftControl);
-                    keyboard.SimulateKeyPress(SharpHook.Native.KeyCode.VcC);
-                    keyboard.SimulateKeyRelease(SharpHook.Native.KeyCode.VcC);
-                    keyboard.SimulateKeyRelease(SharpHook.Native.KeyCode.VcLeftControl);
+                    _keyboard.SimulateKeyPress(SharpHook.Native.KeyCode.VcLeftControl);
+                    _keyboard.SimulateKeyPress(SharpHook.Native.KeyCode.VcC);
+                    _keyboard.SimulateKeyRelease(SharpHook.Native.KeyCode.VcC);
+                    _keyboard.SimulateKeyRelease(SharpHook.Native.KeyCode.VcLeftControl);
                     break;
                 case "$RETURN":
-                    keyboard.SimulateKeyPress(SharpHook.Native.KeyCode.VcEnter);
-                    keyboard.SimulateKeyRelease(SharpHook.Native.KeyCode.VcEnter);
+                    _keyboard.SimulateKeyPress(SharpHook.Native.KeyCode.VcEnter);
+                    _keyboard.SimulateKeyRelease(SharpHook.Native.KeyCode.VcEnter);
                     break;
                 default:
-                    keyboard.SimulateTextEntry(line);
+                    _keyboard.SimulateTextEntry(line);
                     break;
             }
         }
@@ -205,17 +210,17 @@ namespace ScriptRunnerMac
         {
             Console.WriteLine("All commands executed");
             Thread.Sleep(2000);
-            process.Kill();
+            _process.Kill();
         }
 
         private static void SendFinishedToTerminal()
         {
             string message = "Finished!";
-            keyboard.SimulateTextEntry(message);
+            _keyboard.SimulateTextEntry(message);
             Thread.Sleep(10);
             for (int i = 0; i < message.Length; i++)
             {
-                keyboard.SimulateKeyPress(SharpHook.Native.KeyCode.VcBackspace);
+                _keyboard.SimulateKeyPress(SharpHook.Native.KeyCode.VcBackspace);
                 Thread.Sleep(50);
             }
         }
